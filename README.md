@@ -13,7 +13,7 @@ If you're not using homebrew, you can clone this repo and move the `git-redate` 
 
 # Usage
 
-Simply run: `git redate --commits [[number of commits to view]]`.  
+Simply run: `git redate --commits [[number of commits to view]]`.  You'll have to force push in order for your commit history to be rewritten
 
 **Make sure to run this on a clean working directory otherwise it won't work.**
 
