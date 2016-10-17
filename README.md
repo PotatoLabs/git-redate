@@ -13,7 +13,9 @@ If you're not using homebrew, you can clone this repo and move the `git-redate` 
 
 # Usage
 
-`git redate --commits [[number of commits to view]]`. 
+Simply run: `git redate --commits [[number of commits to view]]`.  
+
+**Make sure to run this on a clean working directory otherwise it won't work.**
 
 The `--commits` (a.k.a. `-c`) argument is optional, and defaults to 5 if not provided.
 
