@@ -1,7 +1,7 @@
 # git-redate
 ### Made by Potato Labs
 
-Change the dates of several git commits with a single command
+Change the dates of several git commits with a single command.
 
 ![alt tag](http://oi68.tinypic.com/3ud82.jpg)
 
@@ -13,7 +13,7 @@ If you're not using homebrew, you can clone this repo and move the `git-redate` 
 
 # Usage
 
-Simply run: `git redate --commits [[number of commits to view]]`.  You'll have to force push in order for your commit history to be rewritten
+Simply run: `git redate --commits [[number of commits to view]]`.  You'll have to force push in order for your commit history to be rewritten.
 
 **Make sure to run this on a clean working directory otherwise it won't work.**
 
