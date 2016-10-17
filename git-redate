@@ -41,5 +41,9 @@ while read commit; do
 	)
 	ENVFILTER="$ENVFILTER$COMMIT_ENV"
 done < $tmpfile
-git filter-branch -f --env-filter "$ENVFILTER" >/dev/null
-echo "Git committer dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
+{
+	git filter-branch -f --env-filter "$ENVFILTER" >/dev/null
+	echo "Git committer dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
+} || {
+	echo "Git redate failed. Please make sure you run this on a clean working directory."
+}
