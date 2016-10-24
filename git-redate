@@ -17,7 +17,7 @@ shift
 done
 
 die () {
-    echo `basename $0`: >&2 $*
+    echo >&2 `basename $0`: $*
     exit 1
 }
 
