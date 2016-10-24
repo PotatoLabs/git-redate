@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 while [[ $# -gt 1 ]]
 do
