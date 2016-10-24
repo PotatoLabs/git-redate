@@ -16,7 +16,13 @@ esac
 shift
 done
 
-tmpfile=$(mktemp gitblah)
+die () {
+    echo `basename $0`: >&2 $*
+    exit 1
+}
+
+tmpfile=$(mktemp gitblah-XXXX)
+[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
 trap "rm -f $tmpfile" EXIT
 
 if [ -n "${COMMITS+set}" ];
