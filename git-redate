@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 while [[ $# -gt 1 ]]
 do
@@ -16,7 +16,13 @@ esac
 shift
 done
 
-tmpfile=$(mktemp gitblah)
+die () {
+    echo >&2 `basename $0`: $*
+    exit 1
+}
+
+tmpfile=$(mktemp gitblah-XXXX)
+[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
 trap "rm -f $tmpfile" EXIT
 
 if [ -n "${COMMITS+set}" ];
