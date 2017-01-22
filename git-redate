@@ -1,11 +1,11 @@
 #!/bin/bash
 
 is_git_repo() {
-  git rev-parse --show-toplevel > /dev/null 2>&1
-  result=$?
-  if test $result != 0; then
-    >&2 echo 'Not a git repo!'
-    exit $result
+    git rev-parse --show-toplevel > /dev/null 2>&1
+    result=$?
+    if test $result != 0; then
+        >&2 echo 'Not a git repo!'
+        exit $result
   fi
 }
 
@@ -16,13 +16,13 @@ do
 key="$1"
 
 case $key in
-	-c| --commits)
-	COMMITS="$2"
-	shift
-	;;
-	*)
-	# unknown option
-	;;
+    -c| --commits)
+    COMMITS="$2"
+    shift
+    ;;
+    *)
+    # unknown option
+    ;;
 esac
 shift
 done
@@ -46,17 +46,17 @@ ${VISUAL:-${EDITOR:-vi}} $tmpfile
 
 ENVFILTER=""
 while read commit; do
-	IFS="|" read date hash message <<< "$commit"
-	DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
-	COMMIT_ENV=$(cat <<-END
-	     if [ \$GIT_COMMIT = $hash ];
-	     then
-		 export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
-		 export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
-	     fi;
-	END
-	)
-	ENVFILTER="$ENVFILTER$COMMIT_ENV"
+    IFS="|" read date hash message <<< "$commit"
+    DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+    COMMIT_ENV=$(cat <<-END
+        if [ \$GIT_COMMIT = $hash ];
+        then
+            export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
+            export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
+        fi;
+    END
+    )
+    ENVFILTER="$ENVFILTER$COMMIT_ENV"
 done < $tmpfile
 
 git filter-branch -f --env-filter "$ENVFILTER" >/dev/null
