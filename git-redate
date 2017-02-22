@@ -36,9 +36,16 @@ tmpfile=$(mktemp gitblah-XXXX)
 [ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
 trap "rm -f $tmpfile" EXIT
 
+
+datefmt=%cI
+if [ "`git log -n1  --pretty=format:"$datefmt"`" == "$datefmt" ];
+then
+    datefmt=%ci
+fi
+
 if [ -n "${COMMITS+set}" ];
-then git log -n $COMMITS --pretty=format:"%cI | %H | %s" > $tmpfile;
-else git log -n 5 --pretty=format:"%cI | %H | %s" > $tmpfile;
+then git log -n $COMMITS --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
 fi
 
 ${VISUAL:-${EDITOR:-vi}} $tmpfile
@@ -47,19 +54,24 @@ ${VISUAL:-${EDITOR:-vi}} $tmpfile
 ENVFILTER=""
 while read commit; do
     IFS="|" read date hash message <<< "$commit"
-    DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+    if [ "$datefmt" == "%cI" ]
+    then
+        DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+    else
+        DATE_NO_SPACE="$(echo "${date}")"
+    fi
     COMMIT_ENV=$(cat <<-END
         if [ \$GIT_COMMIT = $hash ];
         then
             export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
             export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
         fi;
-    END
+	END
     )
     ENVFILTER="$ENVFILTER$COMMIT_ENV"
 done < $tmpfile
 
-git filter-branch -f --env-filter "$ENVFILTER" >/dev/null
+git filter-branch -f --env-filter "$ENVFILTER" HEAD~$COMMITS..HEAD >/dev/null
 if [ $? = 0 ] ; then
     echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
