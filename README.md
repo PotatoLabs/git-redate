@@ -1,5 +1,5 @@
 # git-redate
-### Made by [Potato Labs](https://potatolabs.tech.blog)
+### Made by [Potato Labs](http://taterlabs.com)
 
 Change the dates of several git commits with a single command.
 
