@@ -11,13 +11,20 @@ is_git_repo() {
 
 is_git_repo
 
-while [[ $# -gt 1 ]]
+ALL=0
+
+while [[ $# -ge 1 ]]
 do
 key="$1"
 
 case $key in
     -c| --commits)
     COMMITS="$2"
+    if [ -z "${COMMITS}" ]; then COMMITS="5"; fi;
+    shift
+    ;;
+    -a| --all)
+    ALL=1
     shift
     ;;
     *)
@@ -43,9 +50,14 @@ then
     datefmt=%ci
 fi
 
-if [ -n "${COMMITS+set}" ];
-then git log -n $COMMITS --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+if [ "${ALL}" -eq 1 ];
+then
+    git log --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+else
+    if [ -n "${COMMITS+set}" ];
+    then git log -n $COMMITS --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+    else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+    fi
 fi
 
 ${VISUAL:-${EDITOR:-vi}} $tmpfile
@@ -71,7 +83,13 @@ while read commit; do
     ENVFILTER="$ENVFILTER$COMMIT_ENV"
 done < $tmpfile
 
-git filter-branch -f --env-filter "$ENVFILTER" HEAD~$COMMITS..HEAD >/dev/null
+if [ "${ALL}" -eq 1 ];
+then
+    git filter-branch -f --env-filter "$ENVFILTER" -- --all >/dev/null
+else
+    git filter-branch -f --env-filter "$ENVFILTER" HEAD~$COMMITS..HEAD >/dev/null
+fi
+
 if [ $? = 0 ] ; then
     echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
