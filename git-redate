@@ -66,6 +66,11 @@ ${VISUAL:-${EDITOR:-vi}} $tmpfile
 ENVFILTER=""
 while read commit; do
     IFS="|" read date hash message <<< "$commit"
+    shopt -s nocasematch
+    if [[ "$date" == 'now' ]]; then
+        date=$(date +%Y-%m-%dT%H:%M:%S%z);
+    fi
+    shopt -u nocasematch
     if [ "$datefmt" == "%cI" ]
     then
         DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
