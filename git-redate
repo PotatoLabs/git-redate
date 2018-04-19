@@ -77,14 +77,16 @@ while read commit; do
     else
         DATE_NO_SPACE="$(echo "${date}")"
     fi
+
+
     COMMIT_ENV=$(cat <<-END
-        if [ \$GIT_COMMIT = $hash ];
-        then
-            export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
-            export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
-        fi;
-	END
-    )
+if [ \$GIT_COMMIT = $hash ];
+then
+    export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
+    export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
+fi;
+END
+)
     ENVFILTER="$ENVFILTER$COMMIT_ENV"
 done < $tmpfile
 
