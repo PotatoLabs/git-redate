@@ -11,6 +11,35 @@ is_git_repo() {
 
 is_git_repo
 
+make_editor_choice() {
+
+    echo "Which editor do you want to use for this repo?\n";
+    echo "1. VI\n";
+    echo "2. NANO\n";
+    echo "You Choose: ";
+
+    read CHOOSE_EDITOR
+}
+
+is_has_editor() {
+    SETTINGS_FILE="redate-settings";
+    if [ -f "$SETTINGS_FILE" ]
+    then
+        OUR_EDITOR=$(cat ${SETTINGS_FILE});
+    else
+        make_editor_choice;
+        if [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ];
+        then
+            OUR_EDITOR="vi";
+        else
+            OUR_EDITOR="nano";
+        fi
+        echo ${OUR_EDITOR} > ${SETTINGS_FILE}
+    fi
+}
+
+is_has_editor
+
 ALL=0
 
 while [[ $# -ge 1 ]]
@@ -60,8 +89,7 @@ else
     fi
 fi
 
-${VISUAL:-${EDITOR:-vi}} $tmpfile
-
+${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
 
 ENVFILTER=""
 while read commit; do
