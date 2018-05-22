@@ -21,6 +21,7 @@ make_editor_choice() {
     read CHOOSE_EDITOR
 }
 
+
 is_has_editor() {
     SETTINGS_FILE="redate-settings";
     if [ -f "$SETTINGS_FILE" ]
@@ -40,7 +41,10 @@ is_has_editor() {
 
 is_has_editor
 
+
 ALL=0
+DEBUG=0
+LIMITCHUNKS=20
 
 while [[ $# -ge 1 ]]
 do
@@ -50,6 +54,15 @@ case $key in
     -c| --commits)
     COMMITS="$2"
     if [ -z "${COMMITS}" ]; then COMMITS="5"; fi;
+    shift
+    ;;
+    -l| --limit)
+    LIMITCHUNKS="$2"
+    if [ -z "${LIMITCHUNKS}" ]; then LIMITCHUNKS="20"; fi;
+    shift
+    ;;
+    -d| --debug)
+    DEBUG=1
     shift
     ;;
     -a| --all)
@@ -84,15 +97,22 @@ then
     git log --pretty=format:"$datefmt | %H | %s" > $tmpfile;
 else
     if [ -n "${COMMITS+set}" ];
-    then git log -n $COMMITS --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+    then git log -n ${COMMITS} --pretty=format:"$datefmt | %H | %s" > $tmpfile;
     else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
     fi
 fi
 
 ${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
 
-ENVFILTER=""
-while read commit; do
+
+ITER=0
+COLITER=0
+declare -a COLLECTION
+
+COUNTCOMMITS=$(awk 'END {print NR}' $tmpfile)
+
+while read commit || [ -n "$commit" ]; do
+
     IFS="|" read date hash message <<< "$commit"
     shopt -s nocasematch
     if [[ "$date" == 'now' ]]; then
@@ -115,15 +135,60 @@ then
 fi;
 END
 )
-    ENVFILTER="$ENVFILTER$COMMIT_ENV"
+
+    ((ITER++))
+
+    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) == $((LIMITCHUNKS - 1)) ];
+    then
+        echo "Chunk $COLITER Finished"
+    fi
+
+    if [ $((ITER % LIMITCHUNKS)) == 0 ]
+    then
+        ((COLITER++))
+
+        if [ "${DEBUG}" -eq 1 ];
+        then
+            echo "Chunk $COLITER Started"
+        fi
+
+    fi
+
+    COLLECTION[$COLITER]=${COLLECTION[COLITER]}"$COMMIT_ENV"
+    if [ "${DEBUG}" -eq 1 ]
+    then
+        echo "Commit $ITER/$COUNTCOMMITS Collected"
+    fi
+
 done < $tmpfile
 
-if [ "${ALL}" -eq 1 ];
-then
-    git filter-branch -f --env-filter "$ENVFILTER" -- --all >/dev/null
-else
-    git filter-branch -f --env-filter "$ENVFILTER" HEAD~$COMMITS..HEAD >/dev/null
-fi
+ITERATOR=0
+for each in "${COLLECTION[@]}"
+do
+
+    ((ITERATOR++))
+
+    if [ "${ALL}" -eq 1 ];
+    then
+        if [ "${DEBUG}" -eq 1 ];
+        then
+            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
+            git filter-branch -f --env-filter "$each" -- --all
+            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
+        else
+            git filter-branch -f --env-filter "$each" -- --all >/dev/null
+        fi
+    else
+        if [ "${DEBUG}" -eq 1 ];
+        then
+            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
+            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
+            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
+        else
+            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
+        fi
+    fi
+done
 
 if [ $? = 0 ] ; then
     echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
