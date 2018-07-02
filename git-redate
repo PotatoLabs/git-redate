@@ -27,6 +27,9 @@ is_has_editor() {
     if [ -f "$SETTINGS_FILE" ]
     then
         OUR_EDITOR=$(cat ${SETTINGS_FILE});
+    elif [ ! -z "$EDITOR" ]
+    then
+	OUR_EDITOR="$EDITOR";
     else
         make_editor_choice;
         if [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ];
