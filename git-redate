@@ -23,7 +23,7 @@ make_editor_choice() {
 
 
 is_has_editor() {
-    SETTINGS_FILE="redate-settings";
+    SETTINGS_FILE="~/.redate-settings";
     if [ -f "$SETTINGS_FILE" ]
     then
         OUR_EDITOR=$(cat ${SETTINGS_FILE});
