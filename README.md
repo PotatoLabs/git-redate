@@ -11,6 +11,8 @@ For homebrew users, you need to run `brew tap PotatoLabs/homebrew-git-redate` an
 
 If you're not using homebrew, you can clone this repo and move the `git-redate` file into any folders in your $PATH. Restart your terminal afterwards and you're good to go!
 
+For window's users, you may paste the file into `${INSTALLATION_PATH}\mingw64\libexec\git-core`. Assuming you used the default settings the installation path will be `C:\Program Files\Git`.
+
 # Usage
 
 Simply run: `git redate --commits [[number of commits to view]]`.  You'll have to force push in order for your commit history to be rewritten.
