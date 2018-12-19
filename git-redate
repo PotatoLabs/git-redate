@@ -16,9 +16,16 @@ make_editor_choice() {
     echo "Which editor do you want to use for this repo?\n";
     echo "1. VI\n";
     echo "2. NANO\n";
+    echo "3. Your own\n"
     echo "You Choose: ";
 
     read CHOOSE_EDITOR
+}
+
+get_editor_executable() {
+
+    echo "What is the path to your prefered test editor?\n";
+    read EDITOR_PATH
 }
 
 
@@ -32,8 +39,10 @@ is_has_editor() {
 	OUR_EDITOR="$EDITOR";
     else
         make_editor_choice;
-        if [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ];
-        then
+        if [ ${CHOOSE_EDITOR} == 3 ] || [ ${CHOOSE_EDITOR} == "3" ]; then
+            get_editor_executable
+            OUR_EDITOR=${EDITOR_PATH}
+        elif [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ]; then
             OUR_EDITOR="vi";
         else
             OUR_EDITOR="nano";
