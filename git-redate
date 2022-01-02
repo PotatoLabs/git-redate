@@ -30,8 +30,8 @@ get_editor_executable() {
 
 
 is_has_editor() {
-    SETTINGS_FILE="~/.redate-settings";
-    if [ -f "$SETTINGS_FILE" ]
+    SETTINGS_FILE="$HOME/.redate-settings";
+    if [ -f $SETTINGS_FILE ]
     then
         OUR_EDITOR=$(cat ${SETTINGS_FILE});
     elif [ ! -z "$EDITOR" ]
