@@ -114,10 +114,15 @@ git log $LOG_FILTER --date=iso-strict-local --pretty=format:"%cd | %H | %s" > $C
 ${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $COMMITS_FILE
 
 
-REDATE_EXEC="export GIT_COMMITTER_DATE=\$(grep -F \"\$(git rev-parse --verify HEAD)\" $COMMITS_FILE | awk '{ print \$1 }'); \
-                test -n \"\$GIT_COMMITTER_DATE\" && git commit --date=\${GIT_COMMITTER_DATE} --amend --no-edit -n ${COMMIT_ARGS}"
+REDATE_EXEC="export GIT_COMMITTER_DATE=\$(tail -1 $COMMITS_FILE | awk '{ print \$1 }'); \
+              echo \"Handling \$(cat .git/rebase-merge/msgnum)/\$(cat .git/rebase-merge/end) with date: \$GIT_COMMITTER_DATE\" >>$LOG_FILE; \
+              grep -vF \"\$GIT_COMMITTER_DATE\" $COMMITS_FILE >$COMMITS_FILE.tmp; \
+              mv $COMMITS_FILE.tmp $COMMITS_FILE; \
+              test -n \"\$GIT_COMMITTER_DATE\" && git commit --date=\${GIT_COMMITTER_DATE} --amend --no-edit -n ${COMMIT_ARGS}"
 
-git rebase --exec "${REDATE_EXEC}" ${REBASE_REF} >${LOG_FILE} 2>&1 
+
+echo "Rebase ref: ${REBASE_REF}" >>$LOG_FILE
+git rebase --exec "${REDATE_EXEC}" ${REBASE_REF} >>${LOG_FILE} 2>&1 
 
 RESULT=$?
 
