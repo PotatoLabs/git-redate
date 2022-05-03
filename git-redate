@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 is_git_repo() {
     git rev-parse --show-toplevel > /dev/null 2>&1
@@ -19,7 +19,7 @@ make_editor_choice() {
     echo "3. Your own\n"
     echo "You Choose: ";
 
-    read CHOOSE_EDITOR
+    read -d'' -s -n1 CHOOSE_EDITOR
 }
 
 get_editor_executable() {
@@ -56,36 +56,36 @@ is_has_editor
 
 ALL=0
 DEBUG=0
-LIMITCHUNKS=20
+LOG_FILTER=""
+REBASE_REF="--root"
+COMMIT_ARGS=""
+LOG_OUT_PATTERN="error"
 
-while [[ $# -ge 1 ]]
-do
-key="$1"
+while [[ $# -ge 1 ]]; do
+    key="$1"
 
-case $key in
-    -c| --commits)
-    COMMITS="$2"
-    if [ -z "${COMMITS}" ]; then COMMITS="5"; fi;
+    case $key in
+        -c| --commits)
+        COMMITS="${2:-5}"
+        shift
+        ;;
+        -u| --user)
+        LOG_FILTER="${LOG_FILTER} --author=$(git config --get user.email)"
+        shift
+        ;;
+        -d| --debug)
+        DEBUG=1
+        LOG_OUT_PATTERN=""
+        ;;
+        -a| --all)
+        ALL=1
+        ;;
+        *)
+        COMMIT_ARGS="${COMMIT_ARGS} ${key}"
+        # unknown option
+        ;;
+    esac
     shift
-    ;;
-    -l| --limit)
-    LIMITCHUNKS="$2"
-    if [ -z "${LIMITCHUNKS}" ]; then LIMITCHUNKS="20"; fi;
-    shift
-    ;;
-    -d| --debug)
-    DEBUG=1
-    shift
-    ;;
-    -a| --all)
-    ALL=1
-    shift
-    ;;
-    *)
-    # unknown option
-    ;;
-esac
-shift
 done
 
 die () {
@@ -93,117 +93,45 @@ die () {
     exit 1
 }
 
-tmpfile=$(mktemp gitblah-XXXX)
-[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
-trap "rm -f $tmpfile" EXIT
+COMMITS_FILE=$(mktemp /tmp/gitblah-XXXX)
+[ -f "$COMMITS_FILE" ] || die "could not get COMMITS_FILE=[$COMMITS_FILE]"
 
+LOG_FILE=$(mktemp ${COMMITS_FILE}.log)
+[ -f "$LOG_FILE" ] || die "could not get LOG_FILE=[$LOG_FILE]"
 
-datefmt=%cI
-if [ "`git log -n1  --pretty=format:"$datefmt"`" == "$datefmt" ];
-then
-    datefmt=%ci
+if [ "${DEBUG}" -eq 0 ]; then
+    trap "rm -f $COMMITS_FILE; rm -f $LOG_FILE" EXIT
 fi
 
-if [ "${ALL}" -eq 1 ];
-then
-    git log --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-else
-    if [ -n "${COMMITS+set}" ];
-    then git log -n ${COMMITS} --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-    else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-    fi
+
+if [ "${ALL}" -eq 0 ]; then
+    LOG_FILTER="${LOG_FILTER} -n ${COMMITS:-5}"
+    REBASE_REF="HEAD~${COMMITS:-5}"
 fi
 
-${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
+git log $LOG_FILTER --date=iso-strict-local --pretty=format:"%cd | %H | %s" > $COMMITS_FILE;
+
+${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $COMMITS_FILE
 
 
-ITER=0
-COLITER=0
-declare -a COLLECTION
-
-COUNTCOMMITS=$(awk 'END {print NR}' $tmpfile)
-
-while read commit || [ -n "$commit" ]; do
-
-    IFS="|" read date hash message <<< "$commit"
-    shopt -s nocasematch
-    if [[ "$date" == 'now' ]]; then
-        date=$(date +%Y-%m-%dT%H:%M:%S%z);
-    fi
-    shopt -u nocasematch
-    if [ "$datefmt" == "%cI" ]
-    then
-        DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
-    else
-        DATE_NO_SPACE="$(echo "${date}")"
-    fi
+REDATE_EXEC="export GIT_COMMITTER_DATE=\$(tail -1 $COMMITS_FILE | awk '{ print \$1 }'); \
+              echo \"Handling \$(cat .git/rebase-merge/msgnum)/\$(cat .git/rebase-merge/end) with date: \$GIT_COMMITTER_DATE\" >>$LOG_FILE; \
+              grep -vF \"\$GIT_COMMITTER_DATE\" $COMMITS_FILE >$COMMITS_FILE.tmp; \
+              mv $COMMITS_FILE.tmp $COMMITS_FILE; \
+              test -n \"\$GIT_COMMITTER_DATE\" && git commit --date=\${GIT_COMMITTER_DATE} --amend --no-edit -n ${COMMIT_ARGS}"
 
 
-    COMMIT_ENV=$(cat <<-END
-if [ \$GIT_COMMIT = $hash ];
-then
-    export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
-    export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
-fi;
-END
-)
+echo "Rebase ref: ${REBASE_REF}" >>$LOG_FILE
+git rebase --exec "${REDATE_EXEC}" ${REBASE_REF} >>${LOG_FILE} 2>&1 
 
-    ((ITER++))
+RESULT=$?
 
-    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) == $((LIMITCHUNKS - 1)) ];
-    then
-        echo "Chunk $COLITER Finished"
-    fi
+cat ${LOG_FILE} | grep -F "${LOG_OUT_PATTERN}"
 
-    if [ $((ITER % LIMITCHUNKS)) == 0 ]
-    then
-        ((COLITER++))
-
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $COLITER Started"
-        fi
-
-    fi
-
-    COLLECTION[$COLITER]=${COLLECTION[COLITER]}"$COMMIT_ENV"
-    if [ "${DEBUG}" -eq 1 ]
-    then
-        echo "Commit $ITER/$COUNTCOMMITS Collected"
-    fi
-
-done < $tmpfile
-
-ITERATOR=0
-for each in "${COLLECTION[@]}"
-do
-
-    ((ITERATOR++))
-
-    if [ "${ALL}" -eq 1 ];
-    then
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" -- --all
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" -- --all >/dev/null
-        fi
-    else
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
-        fi
-    fi
-done
-
-if [ $? = 0 ] ; then
+if [ $RESULT -eq 0 ] ; then
     echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
     echo "Git redate failed. Please make sure you run this on a clean working directory."
 fi
+
+exit $RESULT
