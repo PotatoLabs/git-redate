@@ -36,7 +36,7 @@ is_has_editor() {
         OUR_EDITOR=$(cat ${SETTINGS_FILE});
     elif [ ! -z "$EDITOR" ]
     then
-	OUR_EDITOR="$EDITOR";
+        OUR_EDITOR="$EDITOR";
     else
         make_editor_choice;
         if [ ${CHOOSE_EDITOR} == 3 ] || [ ${CHOOSE_EDITOR} == "3" ]; then
@@ -174,31 +174,26 @@ END
 
 done < $tmpfile
 
+if [ "${ALL}" -eq 1 ];
+then
+    RANGE="-- --all"
+else
+    RANGE="HEAD~${COMMITS}..HEAD"
+fi
+
 ITERATOR=0
 for each in "${COLLECTION[@]}"
 do
 
     ((ITERATOR++))
 
-    if [ "${ALL}" -eq 1 ];
+    if [ "${DEBUG}" -eq 1 ];
     then
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" -- --all
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" -- --all >/dev/null
-        fi
+        echo "Chunk $ITERATOR/${#COLLECTION[@]} Started"
+        git filter-branch -f --env-filter "$each" $RANGE
+        echo "Chunk $ITERATOR/${#COLLECTION[@]} Finished"
     else
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
-        fi
+        git filter-branch -f --env-filter "$each" $RANGE >/dev/null
     fi
 done
 
