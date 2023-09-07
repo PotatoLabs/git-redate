@@ -39,10 +39,10 @@ is_has_editor() {
 	OUR_EDITOR="$EDITOR";
     else
         make_editor_choice;
-        if [ ${CHOOSE_EDITOR} == 3 ] || [ ${CHOOSE_EDITOR} == "3" ]; then
+        if [ ${CHOOSE_EDITOR} = 3 ] || [ ${CHOOSE_EDITOR} = "3" ]; then
             get_editor_executable
             OUR_EDITOR=${EDITOR_PATH}
-        elif [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ]; then
+        elif [ ${CHOOSE_EDITOR} = 1 ] || [ ${CHOOSE_EDITOR} = "1" ]; then
             OUR_EDITOR="vi";
         else
             OUR_EDITOR="nano";
@@ -58,7 +58,7 @@ ALL=0
 DEBUG=0
 LIMITCHUNKS=20
 
-while [[ $# -ge 1 ]]
+while [ "$#" -ge 1 ]
 do
 key="$1"
 
@@ -99,7 +99,7 @@ trap "rm -f $tmpfile" EXIT
 
 
 datefmt=%cI
-if [ "`git log -n1  --pretty=format:"$datefmt"`" == "$datefmt" ];
+if [ "`git log -n1  --pretty=format:"$datefmt"`" = "$datefmt" ];
 then
     datefmt=%ci
 fi
@@ -119,19 +119,21 @@ ${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
 
 ITER=0
 COLITER=0
-declare -a COLLECTION
 
 COUNTCOMMITS=$(awk 'END {print NR}' $tmpfile)
 
 while read commit || [ -n "$commit" ]; do
 
-    IFS="|" read date hash message <<< "$commit"
-    shopt -s nocasematch
-    if [[ "$date" == 'now' ]]; then
+    IFS="|" read date hash message <<COMMIT
+$commit
+COMMIT
+
+    date_lc="$(echo "$date" | tr '[:upper:]' '[:lower:]')"
+    if [ "$date_lc" = 'now' ]; then
         date=$(date +%Y-%m-%dT%H:%M:%S%z);
     fi
-    shopt -u nocasematch
-    if [ "$datefmt" == "%cI" ]
+
+    if [ "$datefmt" = "%cI" ]
     then
         DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
     else
@@ -148,58 +150,60 @@ fi;
 END
 )
 
-    ((ITER++))
-
-    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) == $((LIMITCHUNKS - 1)) ];
+    if [ $((ITER % LIMITCHUNKS)) = 0 ]
     then
-        echo "Chunk $COLITER Finished"
-    fi
-
-    if [ $((ITER % LIMITCHUNKS)) == 0 ]
-    then
-        ((COLITER++))
+        COLITER="$((COLITER+1))"
 
         if [ "${DEBUG}" -eq 1 ];
         then
             echo "Chunk $COLITER Started"
         fi
-
     fi
 
-    COLLECTION[$COLITER]=${COLLECTION[COLITER]}"$COMMIT_ENV"
+    ITER="$((ITER + 1))"
+
+    eval "__GIT_REDATE_COLLECTION_${COLITER}=\"\${__GIT_REDATE_COLLECTION_${COLITER}:-}\${COMMIT_ENV}\""
+
     if [ "${DEBUG}" -eq 1 ]
     then
         echo "Commit $ITER/$COUNTCOMMITS Collected"
     fi
 
+    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) = 0 ];
+    then
+        echo "Chunk $COLITER Finished"
+    fi
 done < $tmpfile
 
-ITERATOR=0
-for each in "${COLLECTION[@]}"
+ITERATOR=1
+while [ "$ITERATOR" -le "$COLITER" ]
 do
+    each=""
+    eval "each=\"\$__GIT_REDATE_COLLECTION_${ITERATOR}\""
 
-    ((ITERATOR++))
 
     if [ "${ALL}" -eq 1 ];
     then
         if [ "${DEBUG}" -eq 1 ];
         then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
+            echo "Chunk $ITERATOR/$COLITER Started"
             git filter-branch -f --env-filter "$each" -- --all
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
+            echo "Chunk $ITERATOR/$COLITER Finished"
         else
             git filter-branch -f --env-filter "$each" -- --all >/dev/null
         fi
     else
         if [ "${DEBUG}" -eq 1 ];
         then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
+            echo "Chunk $ITERATOR/$COLITER Started"
             git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
+            echo "Chunk $ITERATOR/$COLITER Finished"
         else
             git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
         fi
     fi
+
+    ITERATOR="$((ITERATOR+1))"
 done
 
 if [ $? = 0 ] ; then
