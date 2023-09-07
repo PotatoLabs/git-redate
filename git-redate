@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 is_git_repo() {
     git rev-parse --show-toplevel > /dev/null 2>&1
