@@ -113,8 +113,12 @@ croak () {
     die "${dashless}: $*"
 }
 
-tmpfile=$(mktemp gitblah-XXXX)
-[ -f "$tmpfile" ] || croak "could not get tmpfile=[$tmpfile]"
+GIT_DIR="${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null)}"
+
+if ! tmpfile=$(mktemp "${GIT_DIR:+${GIT_DIR}/}GIT_REDATE.XXXXXXXXXX") || ! [ -f "$tmpfile" ]; then
+    croak "could not get tmpfile=[$tmpfile]"
+fi
+
 trap "rm -f $tmpfile" EXIT
 
 
