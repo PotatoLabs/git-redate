@@ -1,15 +1,25 @@
 #!/bin/sh
 
-is_git_repo() {
-    git rev-parse --show-toplevel > /dev/null 2>&1
-    result=$?
-    if test $result != 0; then
-        >&2 echo 'Not a git repo!'
-        exit $result
-  fi
-}
+dashless="${0##*/}"
+dashless="${dashless%%-*} ${dashless#*-}"
 
-is_git_repo
+# This variable is consulted by the code in "git-sh-setup", which is sourced
+# below -- we don't need to export the variable.
+# shellcheck disable=SC2034
+OPTIONS_SPEC="${dashless} [<options>]
+
+${dashless} changes the dates of one or more git commits according to an interactively-specified scheme.
+--
+d,debug             show diagnostic output
+c,commits=<commits> number of commits to re-date (default: 5)
+l,limit=<limit>     number of commits to re-date in a single batch (default: 20)
+a,all               re-date all commits
+"
+
+# Allow running this command from a subdirectory of the working tree
+# shellcheck disable=SC1091
+SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
+
 
 make_editor_choice() {
 
@@ -77,9 +87,19 @@ case $key in
     DEBUG=1
     shift
     ;;
+    --no-debug)
+    DEBUG=0
+    ;;
     -a| --all)
     ALL=1
     shift
+    ;;
+    --no-all)
+    ALL=0
+    ;;
+    --)
+    shift
+    break
     ;;
     *)
     # unknown option
@@ -88,13 +108,13 @@ esac
 shift
 done
 
-die () {
-    echo >&2 `basename $0`: $*
-    exit 1
+croak () {
+    # `die` is from git-sh-setup
+    die "${dashless}: $*"
 }
 
 tmpfile=$(mktemp gitblah-XXXX)
-[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
+[ -f "$tmpfile" ] || croak "could not get tmpfile=[$tmpfile]"
 trap "rm -f $tmpfile" EXIT
 
 
