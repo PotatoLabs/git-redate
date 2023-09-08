@@ -14,12 +14,12 @@ d,debug             show diagnostic output
 c,commits=<commits> number of commits to re-date (default: 5)
 l,limit=<limit>     number of commits to re-date in a single batch (default: 20)
 a,all               re-date all commits
+n,dry-run           show re-dating commands, but do not execute them
 "
 
 # Allow running this command from a subdirectory of the working tree
 # shellcheck disable=SC1091
 SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
-
 
 make_editor_choice() {
 
@@ -66,6 +66,7 @@ is_has_editor
 
 ALL=0
 DEBUG=0
+DRY_RUN=0
 LIMITCHUNKS=20
 
 while [ "$#" -ge 1 ]
@@ -94,6 +95,12 @@ case $key in
     ;;
     --no-all)
     ALL=0
+    ;;
+    -n| --dry-run)
+    DRY_RUN=1
+    ;;
+    --no-dry-run)
+    DRY_RUN=0
     ;;
     --)
     shift
@@ -133,6 +140,15 @@ else
     }
 fi
 
+if [ "$DRY_RUN" = 1 ]; then
+    run() {
+        echo "$*" 1>&2
+    }
+else
+    run() {
+        "$@"
+    }
+fi
 
 datefmt=%cI
 if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ];
@@ -220,9 +236,9 @@ do
 
     if [ "${ALL}" -eq 1 ];
     then
-        git filter-branch -f --env-filter "$each" -- --all || rc="$?"
+        run git filter-branch -f --env-filter "$each" -- --all || rc="$?"
     else
-        git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
+        run git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
     fi
 
     debug "Chunk $ITERATOR/$COLITER Finished"
