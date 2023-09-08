@@ -178,7 +178,7 @@ apply_redate() {
 }
 
 datefmt=%cI
-if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ]; then
+if [ "$(git log -n1 --pretty=format:"$datefmt")" = "$datefmt" ]; then
     datefmt=%ci
 fi
 
