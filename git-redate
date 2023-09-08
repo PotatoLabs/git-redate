@@ -25,46 +25,45 @@ diag() {
     echo "$@" 1>&2
 }
 
-while [ "$#" -ge 1 ]
-do
-key="$1"
+while [ "$#" -ge 1 ]; do
+    key="$1"
 
-case $key in
-    -c| --commits)
-    COMMITS="$2"
-    shift
-    ;;
-    -l| --limit)
-    LIMITCHUNKS="$2"
-    shift
-    ;;
-    -d| --debug)
-    DEBUG=1
-    ;;
+    case $key in
+    -c | --commits)
+        COMMITS="$2"
+        shift
+        ;;
+    -l | --limit)
+        LIMITCHUNKS="$2"
+        shift
+        ;;
+    -d | --debug)
+        DEBUG=1
+        ;;
     --no-debug)
-    DEBUG=0
-    ;;
-    -a| --all)
-    ALL=1
-    ;;
+        DEBUG=0
+        ;;
+    -a | --all)
+        ALL=1
+        ;;
     --no-all)
-    ALL=0
-    ;;
-    -n| --dry-run)
-    DRY_RUN=1
-    ;;
+        ALL=0
+        ;;
+    -n | --dry-run)
+        DRY_RUN=1
+        ;;
     --no-dry-run)
-    DRY_RUN=0
-    ;;
+        DRY_RUN=0
+        ;;
     --)
-    shift
-    break
-    ;;
+        shift
+        break
+        ;;
     *)
-    # unknown option
-    ;;
-esac
-shift
+        # unknown option
+        ;;
+    esac
+    shift
 done
 
 git_config_get_cond() {
@@ -110,6 +109,7 @@ git_config_get_bool_cond() {
             ;;
         *)
             printf -- '%s' "$raw"
+        ;;
     esac
 }
 
@@ -129,12 +129,12 @@ COMMITS="$(git_config_get_posint_cond redate.commits "${COMMITS:-}" 5)" || exit
 DEBUG="$(git_config_get_bool_cond redate.debug "${DEBUG:-}" 0)" || exit
 LIMITCHUNKS="$(git_config_get_posint_cond redate.limit "${LIMITCHUNKS:-}" 20)" || exit
 
-croak () {
+croak()  {
     # `die` is from git-sh-setup
     die "${dashless}: $*"
 }
 
-GIT_DIR="${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null)}"
+GIT_DIR="${GIT_DIR:-$(git rev-parse --git-dir 2> /dev/null)}"
 
 if ! tmpfile=$(mktemp "${GIT_DIR:+${GIT_DIR}/}GIT_REDATE.XXXXXXXXXX") || ! [ -f "$tmpfile" ]; then
     croak "could not get tmpfile=[$tmpfile]"
@@ -177,13 +177,11 @@ else
 fi
 
 datefmt=%cI
-if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ];
-then
+if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ]; then
     datefmt=%ci
 fi
 
-if [ "${ALL}" -eq 1 ];
-then
+if [ "$ALL" -eq 1 ]; then
     git log --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
 else
     git log -n "$COMMITS" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
@@ -197,39 +195,36 @@ COLITER=0
 COUNTCOMMITS=$(awk 'END {print NR}' "$tmpfile")
 
 while read -r commit || [ -n "$commit" ]; do
-
-    IFS="|" read -r date hash _ <<COMMIT
+    IFS="|" read -r date hash _ << COMMIT
 $commit
 COMMIT
 
     date_lc="$(echo "$date" | tr '[:upper:]' '[:lower:]')"
     if [ "$date_lc" = 'now' ]; then
-        date=$(date +%Y-%m-%dT%H:%M:%S%z);
+        date=$(date +%Y-%m-%dT%H:%M:%S%z)
     fi
 
-    if [ "$datefmt" = "%cI" ]
-    then
+    if [ "$datefmt" = "%cI" ]; then
         DATE_NO_SPACE="$(echo "${date}" | tr -d '[:space:]')"
     else
         DATE_NO_SPACE="$date"
     fi
 
-
     # `COMMIT_ENV` is used in an `eval` below; silence warning about unused
     # variable.
     # shellcheck disable=SC2034
-    COMMIT_ENV=$(cat <<-END
+    COMMIT_ENV=$(
+                 cat <<- END
 if [ \$GIT_COMMIT = $hash ];
 then
     export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
     export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
 fi;
 END
-)
+    )
 
-    if [ $((ITER % LIMITCHUNKS)) = 0 ]
-    then
-        COLITER="$((COLITER+1))"
+    if [ $((ITER % LIMITCHUNKS)) = 0 ]; then
+        COLITER="$((COLITER + 1))"
         debug "Chunk $COLITER Started"
     fi
 
@@ -239,16 +234,14 @@ END
 
     debug "Commit $ITER/$COUNTCOMMITS Collected"
 
-    if [ $((ITER % LIMITCHUNKS)) = 0 ];
-    then
+    if [ $((ITER % LIMITCHUNKS)) = 0 ]; then
         debug "Chunk $COLITER Finished"
     fi
 done < "$tmpfile"
 
 rc=0
 ITERATOR=1
-while [ "$ITERATOR" -le "$COLITER" ]
-do
+while [ "$ITERATOR" -le "$COLITER" ]; do
     each=""
     eval "each=\"\$__GIT_REDATE_COLLECTION_${ITERATOR}\""
 
@@ -258,10 +251,10 @@ do
 
     debug "Chunk $ITERATOR/$COLITER Finished"
 
-    ITERATOR="$((ITERATOR+1))"
+    ITERATOR="$((ITERATOR + 1))"
 done
 
-if [ "$rc" = 0 ] ; then
+if [ "$rc" = 0 ]; then
     diag "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
     diag "Git redate failed. Please make sure you run this on a clean working directory."
