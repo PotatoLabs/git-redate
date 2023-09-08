@@ -123,6 +123,16 @@ cleanup() {
 
 trap cleanup EXIT
 
+if [ "$DEBUG" = 1 ]; then
+    debug() {
+        echo "$*" 1>&2
+    }
+else
+    debug() {
+        :
+    }
+fi
+
 
 datefmt=%cI
 if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ];
@@ -184,25 +194,18 @@ END
     if [ $((ITER % LIMITCHUNKS)) = 0 ]
     then
         COLITER="$((COLITER+1))"
-
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $COLITER Started"
-        fi
+        debug "Chunk $COLITER Started"
     fi
 
     ITER="$((ITER + 1))"
 
     eval "__GIT_REDATE_COLLECTION_${COLITER}=\"\${__GIT_REDATE_COLLECTION_${COLITER}:-}\${COMMIT_ENV}\""
 
-    if [ "${DEBUG}" -eq 1 ]
-    then
-        echo "Commit $ITER/$COUNTCOMMITS Collected"
-    fi
+    debug "Commit $ITER/$COUNTCOMMITS Collected"
 
-    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) = 0 ];
+    if [ $((ITER % LIMITCHUNKS)) = 0 ];
     then
-        echo "Chunk $COLITER Finished"
+        debug "Chunk $COLITER Finished"
     fi
 done < "$tmpfile"
 
@@ -213,26 +216,16 @@ do
     each=""
     eval "each=\"\$__GIT_REDATE_COLLECTION_${ITERATOR}\""
 
+    debug "Chunk $ITERATOR/$COLITER Started"
+
     if [ "${ALL}" -eq 1 ];
     then
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/$COLITER Started"
-            git filter-branch -f --env-filter "$each" -- --all || rc="$?"
-            echo "Chunk $ITERATOR/$COLITER Finished"
-        else
-            git filter-branch -f --env-filter "$each" -- --all >/dev/null || rc="$?"
-        fi
+        git filter-branch -f --env-filter "$each" -- --all || rc="$?"
     else
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/$COLITER Started"
-            git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
-            echo "Chunk $ITERATOR/$COLITER Finished"
-        else
-            git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}..HEAD" >/dev/null || rc="$?"
-        fi
+        git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
     fi
+
+    debug "Chunk $ITERATOR/$COLITER Finished"
 
     ITERATOR="$((ITERATOR+1))"
 done
