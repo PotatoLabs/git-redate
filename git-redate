@@ -239,6 +239,10 @@ END
     fi
 done < "$tmpfile"
 
+if [ "$COLITER" -gt 0 ]; then
+    debug "Chunk $COLITER Finished"
+fi
+
 rc=0
 ITERATOR=1
 while [ "$ITERATOR" -le "$COLITER" ]; do
