@@ -25,11 +25,6 @@ diag() {
     echo "$@" 1>&2
 }
 
-ALL=0
-DEBUG=0
-DRY_RUN=0
-LIMITCHUNKS=20
-
 while [ "$#" -ge 1 ]
 do
 key="$1"
@@ -37,12 +32,10 @@ key="$1"
 case $key in
     -c| --commits)
     COMMITS="$2"
-    if [ -z "${COMMITS}" ]; then COMMITS="5"; fi;
     shift
     ;;
     -l| --limit)
     LIMITCHUNKS="$2"
-    if [ -z "${LIMITCHUNKS}" ]; then LIMITCHUNKS="20"; fi;
     shift
     ;;
     -d| --debug)
@@ -73,6 +66,68 @@ case $key in
 esac
 shift
 done
+
+git_config_get_cond() {
+    setting="${1?}"
+    shift
+
+    current="${1:-}"
+    shift
+
+    default="${1?}"
+    shift
+
+    if [ -n "${current:-}" ]; then
+        final="$current"
+    else
+        from_config="$(git config "$@" --get "${setting?}")" || {
+            case "$?" in
+                128)
+                    return 128
+                    ;;
+            esac
+        }
+
+        if [ -n "$from_config" ]; then
+            final="$from_config"
+        else
+            final="${default?}"
+        fi
+    fi
+
+    printf -- '%s' "$final"
+}
+
+git_config_get_bool_cond() {
+    raw="$(git_config_get_cond "$@" --bool)" || return
+
+    case "$raw" in
+        true)
+            printf -- '1'
+            ;;
+        false)
+            printf -- '0'
+            ;;
+        *)
+            printf -- '%s' "$raw"
+    esac
+}
+
+git_config_get_posint_cond() {
+    raw="$(git_config_get_cond "$@" --type int)" || return
+
+    if [ -z "$raw" ] || [ "$raw" -lt 1 ]; then
+        die "fatal: bad positive integer config value '${raw}' for '${1?}'"
+        return 128
+    fi
+
+    printf -- '%d' "$raw"
+}
+
+ALL="$(git_config_get_bool_cond redate.all "${ALL:-}" 0)" || exit
+COMMITS="$(git_config_get_posint_cond redate.commits "${COMMITS:-}" 5)" || exit
+DEBUG="$(git_config_get_bool_cond redate.debug "${DEBUG:-}" 0)" || exit
+LIMITCHUNKS="$(git_config_get_posint_cond redate.limit "${LIMITCHUNKS:-}" 20)" || exit
 
 croak () {
     # `die` is from git-sh-setup
