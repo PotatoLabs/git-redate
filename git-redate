@@ -22,51 +22,8 @@ n,dry-run           show re-dating commands, but do not execute them
 SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
 
 diag() {
-    echo "$*" 1>&2
+    echo "$@" 1>&2
 }
-
-make_editor_choice() {
-
-    echo 'Which editor do you want to use for this repo?'
-    echo '1. VI'
-    echo '2. NANO'
-    echo '3. Your own'
-    echo 'You Choose: '
-
-    read -r CHOOSE_EDITOR
-}
-
-get_editor_executable() {
-
-    echo 'What is the path to your prefered test editor?'
-    read -r EDITOR_PATH
-}
-
-
-is_has_editor() {
-    SETTINGS_FILE=~/.redate-settings
-    if [ -f "$SETTINGS_FILE" ]
-    then
-        OUR_EDITOR=$(cat ${SETTINGS_FILE});
-    elif [ -n "${EDITOR:-}" ]
-    then
-	OUR_EDITOR="$EDITOR";
-    else
-        make_editor_choice
-        if [ "$CHOOSE_EDITOR" = 3 ]; then
-            get_editor_executable
-            OUR_EDITOR=${EDITOR_PATH}
-        elif [ "$CHOOSE_EDITOR" = 1 ]; then
-            OUR_EDITOR="vi";
-        else
-            OUR_EDITOR="nano";
-        fi
-        echo "$OUR_EDITOR" > "$SETTINGS_FILE"
-    fi
-}
-
-is_has_editor
-
 
 ALL=0
 DEBUG=0
@@ -172,8 +129,7 @@ else
     fi
 fi
 
-${VISUAL:-${EDITOR:-${OUR_EDITOR}}} "$tmpfile"
-
+git_editor "$tmpfile" || exit
 
 ITER=0
 COLITER=0
