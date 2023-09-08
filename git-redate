@@ -176,12 +176,7 @@ if [ "${ALL}" -eq 1 ];
 then
     git log --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
 else
-    if [ -n "${COMMITS+set}" ]
-    then
-        git log -n "$COMMITS" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
-    else
-        git log -n 5 --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
-    fi
+    git log -n "$COMMITS" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
 fi
 
 git_editor "$tmpfile" || exit
