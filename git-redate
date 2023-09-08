@@ -166,6 +166,16 @@ else
     }
 fi
 
+if [ "$ALL" = 1 ]; then
+    apply_redate() {
+        run git filter-branch -f --env-filter "${1?}" -- --all
+    }
+else
+    apply_redate() {
+        run git filter-branch -f --env-filter "${1?}" "HEAD~${COMMITS}..HEAD"
+    }
+fi
+
 datefmt=%cI
 if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ];
 then
@@ -244,12 +254,7 @@ do
 
     debug "Chunk $ITERATOR/$COLITER Started"
 
-    if [ "${ALL}" -eq 1 ];
-    then
-        run git filter-branch -f --env-filter "$each" -- --all || rc="$?"
-    else
-        run git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
-    fi
+    apply_redate "$each" || rc="$?"
 
     debug "Chunk $ITERATOR/$COLITER Finished"
 
