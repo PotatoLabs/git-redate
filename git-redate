@@ -23,41 +23,41 @@ SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
 
 make_editor_choice() {
 
-    echo "Which editor do you want to use for this repo?\n";
-    echo "1. VI\n";
-    echo "2. NANO\n";
-    echo "3. Your own\n"
-    echo "You Choose: ";
+    echo 'Which editor do you want to use for this repo?'
+    echo '1. VI'
+    echo '2. NANO'
+    echo '3. Your own'
+    echo 'You Choose: '
 
-    read CHOOSE_EDITOR
+    read -r CHOOSE_EDITOR
 }
 
 get_editor_executable() {
 
-    echo "What is the path to your prefered test editor?\n";
-    read EDITOR_PATH
+    echo 'What is the path to your prefered test editor?'
+    read -r EDITOR_PATH
 }
 
 
 is_has_editor() {
-    SETTINGS_FILE="~/.redate-settings";
+    SETTINGS_FILE=~/.redate-settings
     if [ -f "$SETTINGS_FILE" ]
     then
         OUR_EDITOR=$(cat ${SETTINGS_FILE});
-    elif [ ! -z "$EDITOR" ]
+    elif [ -n "${EDITOR:-}" ]
     then
 	OUR_EDITOR="$EDITOR";
     else
-        make_editor_choice;
-        if [ ${CHOOSE_EDITOR} = 3 ] || [ ${CHOOSE_EDITOR} = "3" ]; then
+        make_editor_choice
+        if [ "$CHOOSE_EDITOR" = 3 ]; then
             get_editor_executable
             OUR_EDITOR=${EDITOR_PATH}
-        elif [ ${CHOOSE_EDITOR} = 1 ] || [ ${CHOOSE_EDITOR} = "1" ]; then
+        elif [ "$CHOOSE_EDITOR" = 1 ]; then
             OUR_EDITOR="vi";
         else
             OUR_EDITOR="nano";
         fi
-        echo ${OUR_EDITOR} > ${SETTINGS_FILE}
+        echo "$OUR_EDITOR" > "$SETTINGS_FILE"
     fi
 }
 
@@ -119,36 +119,42 @@ if ! tmpfile=$(mktemp "${GIT_DIR:+${GIT_DIR}/}GIT_REDATE.XXXXXXXXXX") || ! [ -f 
     croak "could not get tmpfile=[$tmpfile]"
 fi
 
-trap "rm -f $tmpfile" EXIT
+cleanup() {
+    rm -f "${tmpfile?}"
+}
+
+trap cleanup EXIT
 
 
 datefmt=%cI
-if [ "`git log -n1  --pretty=format:"$datefmt"`" = "$datefmt" ];
+if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ];
 then
     datefmt=%ci
 fi
 
 if [ "${ALL}" -eq 1 ];
 then
-    git log --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+    git log --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
 else
-    if [ -n "${COMMITS+set}" ];
-    then git log -n ${COMMITS} --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-    else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+    if [ -n "${COMMITS+set}" ]
+    then
+        git log -n "$COMMITS" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
+    else
+        git log -n 5 --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
     fi
 fi
 
-${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
+${VISUAL:-${EDITOR:-${OUR_EDITOR}}} "$tmpfile"
 
 
 ITER=0
 COLITER=0
 
-COUNTCOMMITS=$(awk 'END {print NR}' $tmpfile)
+COUNTCOMMITS=$(awk 'END {print NR}' "$tmpfile")
 
-while read commit || [ -n "$commit" ]; do
+while read -r commit || [ -n "$commit" ]; do
 
-    IFS="|" read date hash message <<COMMIT
+    IFS="|" read -r date hash _ <<COMMIT
 $commit
 COMMIT
 
@@ -159,12 +165,15 @@ COMMIT
 
     if [ "$datefmt" = "%cI" ]
     then
-        DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+        DATE_NO_SPACE="$(echo "${date}" | tr -d '[:space:]')"
     else
-        DATE_NO_SPACE="$(echo "${date}")"
+        DATE_NO_SPACE="$date"
     fi
 
 
+    # `COMMIT_ENV` is used in an `eval` below; silence warning about unused
+    # variable.
+    # shellcheck disable=SC2034
     COMMIT_ENV=$(cat <<-END
 if [ \$GIT_COMMIT = $hash ];
 then
@@ -197,41 +206,42 @@ END
     then
         echo "Chunk $COLITER Finished"
     fi
-done < $tmpfile
+done < "$tmpfile"
 
+rc=0
 ITERATOR=1
 while [ "$ITERATOR" -le "$COLITER" ]
 do
     each=""
     eval "each=\"\$__GIT_REDATE_COLLECTION_${ITERATOR}\""
 
-
     if [ "${ALL}" -eq 1 ];
     then
         if [ "${DEBUG}" -eq 1 ];
         then
             echo "Chunk $ITERATOR/$COLITER Started"
-            git filter-branch -f --env-filter "$each" -- --all
+            git filter-branch -f --env-filter "$each" -- --all || rc="$?"
             echo "Chunk $ITERATOR/$COLITER Finished"
         else
-            git filter-branch -f --env-filter "$each" -- --all >/dev/null
+            git filter-branch -f --env-filter "$each" -- --all >/dev/null || rc="$?"
         fi
     else
         if [ "${DEBUG}" -eq 1 ];
         then
             echo "Chunk $ITERATOR/$COLITER Started"
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
+            git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}"..HEAD || rc="$?"
             echo "Chunk $ITERATOR/$COLITER Finished"
         else
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
+            git filter-branch -f --env-filter "$each" "HEAD~${COMMITS}..HEAD" >/dev/null || rc="$?"
         fi
     fi
 
     ITERATOR="$((ITERATOR+1))"
 done
 
-if [ $? = 0 ] ; then
+if [ "$rc" = 0 ] ; then
     echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
     echo "Git redate failed. Please make sure you run this on a clean working directory."
+    exit "$rc"
 fi
