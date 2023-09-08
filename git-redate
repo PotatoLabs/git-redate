@@ -21,6 +21,10 @@ n,dry-run           show re-dating commands, but do not execute them
 # shellcheck disable=SC1091
 SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
 
+diag() {
+    echo "$*" 1>&2
+}
+
 make_editor_choice() {
 
     echo 'Which editor do you want to use for this repo?'
@@ -132,7 +136,7 @@ trap cleanup EXIT
 
 if [ "$DEBUG" = 1 ]; then
     debug() {
-        echo "$*" 1>&2
+        diag "$@"
     }
 else
     debug() {
@@ -142,7 +146,7 @@ fi
 
 if [ "$DRY_RUN" = 1 ]; then
     run() {
-        echo "$*" 1>&2
+        diag "$@"
     }
 else
     run() {
@@ -247,8 +251,8 @@ do
 done
 
 if [ "$rc" = 0 ] ; then
-    echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
+    diag "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
-    echo "Git redate failed. Please make sure you run this on a clean working directory."
+    diag "Git redate failed. Please make sure you run this on a clean working directory."
     exit "$rc"
 fi
