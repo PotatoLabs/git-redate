@@ -60,7 +60,7 @@ while [ "$#" -ge 1 ]; do
         break
         ;;
     *)
-        # unknown option
+        break
         ;;
     esac
     shift
@@ -166,15 +166,16 @@ else
     }
 fi
 
-if [ "$ALL" = 1 ]; then
-    apply_redate() {
-        run git filter-branch -f --env-filter "${1?}" -- --all
-    }
-else
-    apply_redate() {
-        run git filter-branch -f --env-filter "${1?}" "HEAD~${COMMITS}..HEAD"
-    }
-fi
+list_commits() {
+    git rev-list "$@" --no-commit-header --pretty=format:"$datefmt | %H | %s"
+}
+
+apply_redate() {
+    env_filter="${1?}" || return
+    shift
+
+    run git filter-branch -f --env-filter "$env_filter" -- "$@"
+}
 
 datefmt=%cI
 if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ]; then
@@ -182,10 +183,26 @@ if [ "$(git log -n1  --pretty=format:"$datefmt")" = "$datefmt" ]; then
 fi
 
 if [ "$ALL" -eq 1 ]; then
-    git log --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
-else
-    git log -n "$COMMITS" --pretty=format:"$datefmt | %H | %s" > "$tmpfile"
+    set -- --all
+elif [ "$#" -eq 0 ]; then
+    # Don't use `--max-count="$COMMITS"`, as `git filter-branch` passes options
+    # through to both `git rev-list` (which recognizes `--max-count`) *and*
+    # `git rev-parse` (which does not -- or, rather, which treats
+    # `--max-counts="$COUNT"` as a revision to parse).
+    if count="$(list_commits --count HEAD 2>/dev/null)"; then
+        if [ "$count" -lt "$COMMITS" ]; then
+            COMMITS="$count"
+        fi
+    fi
+
+    if [ "$COMMITS" -eq 1 ]; then
+        set -- HEAD
+    else
+        set -- "HEAD~${COMMITS}..HEAD"
+    fi
 fi
+
+list_commits "$@" > "$tmpfile" || exit
 
 git_editor "$tmpfile" || exit
 
@@ -251,7 +268,7 @@ while [ "$ITERATOR" -le "$COLITER" ]; do
 
     debug "Chunk $ITERATOR/$COLITER Started"
 
-    apply_redate "$each" || rc="$?"
+    apply_redate "$each" "$@" || rc="$?"
 
     debug "Chunk $ITERATOR/$COLITER Finished"
 
