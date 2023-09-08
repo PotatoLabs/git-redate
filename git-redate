@@ -6,9 +6,14 @@ dashless="${dashless%%-*} ${dashless#*-}"
 # This variable is consulted by the code in "git-sh-setup", which is sourced
 # below -- we don't need to export the variable.
 # shellcheck disable=SC2034
-OPTIONS_SPEC="${dashless} [<options>]
+OPTIONS_SPEC="\
+${dashless} [<options>] [[--] <rev-list-options>]
 
-${dashless} changes the dates of one or more git commits according to an interactively-specified scheme.
+Change the dates of one or more git commits according to an interactively-specified scheme.
+
+${dashless} --all
+${dashless} --count 10
+${dashless} HEAD~10..HEAD~6
 --
 d,debug             show diagnostic output
 c,commits=<commits> number of commits to re-date (default: 5)
