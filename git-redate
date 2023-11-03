@@ -123,7 +123,15 @@ git_config_get_cond() {
         if [ -n "$from_config" ]; then
             final="$from_config"
         else
-            final="${default?}"
+            # Normalize the default value by sending it through the `git
+            # config` machinery.
+            final="$(git -c "${setting?}=${default?}" config "$@" --get "${setting?}")" || {
+                case "$?" in
+                    128)
+                        return 128
+                        ;;
+                esac
+            }
         fi
     fi
 
