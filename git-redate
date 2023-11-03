@@ -21,6 +21,8 @@ l,limit=<limit>      number of commits to re-date in a single batch (default: 20
 a,all                re-date all commits
 n,dry-run            show re-dating commands, but do not execute them
 original=<namespace> namespace where original commits will be stored (default: refs/original)
+S,gpg-sign?<keyid>   sign commits (negate with --no-gpg-sign)
+no-gpg-sign*         do not sign commits
 "
 
 # Allow running this command from a subdirectory of the working tree
@@ -64,6 +66,26 @@ while [ "$#" -ge 1 ]; do
     --original)
         ORIGINAL="$2"
         shift
+        ;;
+    -S | --gpg-sign)
+        GPGSIGN=1
+
+        # XXX assumes key IDs do not start with `-` characters
+        if [ "$#" -ge 2 ]; then
+            case "$2" in
+                -*)
+                    # NOP, no key ID
+                    ;;
+                *)
+                    echo KEYID="$2"
+                    KEYID="$2"
+                    shift
+                    ;;
+            esac
+        fi
+        ;;
+    --no-gpg-sign)
+        GPGSIGN=0
         ;;
     --)
         shift
@@ -140,6 +162,7 @@ COMMITS="$(git_config_get_posint_cond redate.commits "${COMMITS:-}" 5)" || exit
 DEBUG="$(git_config_get_bool_cond redate.debug "${DEBUG:-}" 0)" || exit
 LIMITCHUNKS="$(git_config_get_posint_cond redate.limit "${LIMITCHUNKS:-}" 20)" || exit
 ORIGINAL="$(git_config_get_cond redate.original "${ORIGINAL:-}" refs/original)" || exit
+GPGSIGN="$(git_config_get_bool_cond redate.gpgsign "${GPGSIGN:-}" 0)" || exit
 
 croak()  {
     # `die` is from git-sh-setup
@@ -178,6 +201,31 @@ else
     }
 fi
 
+run_filter_branch_base() {
+    run git filter-branch -f --original "$ORIGINAL" "$@"
+}
+
+if [ "${GPGSIGN:-0}" = 1 ]; then
+    if [ -n "${KEYID:-}" ]; then
+        run_filter_branch() {
+            # Prevent shell injection via `KEYID` by exporting it inline and
+            # expanding the exported value safely within the commit filter
+            # command.
+            # shellcheck disable=SC2016
+            __GIT_REDATE_KEYID="$KEYID" run_filter_branch_base --commit-filter 'git commit-tree -S"${__GIT_REDATE_KEYID?}" "$@"' "$@"
+        }
+    else
+        run_filter_branch() {
+            run_filter_branch_base --commit-filter 'git commit-tree -S "$@"' "$@"
+        }
+    fi
+else
+    run_filter_branch() {
+        run_filter_branch_base "$@"
+    }
+fi
+
+
 list_commits() {
     # XXX `--exclude` must come before `--all`, etc.; it only affects
     # *subsequent* commit-filtering options.
@@ -188,7 +236,7 @@ apply_redate() {
     env_filter="${1?}" || return
     shift
 
-    run git filter-branch -f --original "$ORIGINAL" --env-filter "$env_filter" -- "$@"
+    run_filter_branch --env-filter "$env_filter" -- "$@"
 }
 
 datefmt=%cI

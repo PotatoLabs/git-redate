@@ -40,6 +40,7 @@ The available options are:
 - `redate.debug`: takes a boolean value.  When enabled, `git redate` defaults to issuing extra diagnostic information to standard error.
 - `redate.limit`: takes a positive integer.  Used as the default number of commits to modify in a single `git filter-branch` operation.
 - `redate.original`: takes a namespace.  Used as the namespace where the re-dated commits will be stored.[^git-filter-branch-help]
+- `redate.gpgsign`: takes a boolean value.  When enabled, `git redate` defaults to signing re-dated commits.
 
 Example configuration:
 
@@ -50,6 +51,7 @@ commits = 10
 debug = true
 limit = 35
 original = refs/redate
+gpgsign = yes
 ```
 
 [^git-gitrevisions-help]: See [`git help gitrevisions`](https://git-scm.com/docs/gitrevisions) for various ways to spell commit ranges.
