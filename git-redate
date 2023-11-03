@@ -15,11 +15,12 @@ ${dashless} --all
 ${dashless} --count 10
 ${dashless} HEAD~10..HEAD~6
 --
-d,debug             show diagnostic output
-c,commits=<commits> number of commits to re-date (default: 5)
-l,limit=<limit>     number of commits to re-date in a single batch (default: 20)
-a,all               re-date all commits
-n,dry-run           show re-dating commands, but do not execute them
+d,debug              show diagnostic output
+c,commits=<commits>  number of commits to re-date (default: 5)
+l,limit=<limit>      number of commits to re-date in a single batch (default: 20)
+a,all                re-date all commits
+n,dry-run            show re-dating commands, but do not execute them
+original=<namespace> namespace where original commits will be stored (default: refs/original)
 "
 
 # Allow running this command from a subdirectory of the working tree
@@ -60,6 +61,10 @@ while [ "$#" -ge 1 ]; do
     --no-dry-run)
         DRY_RUN=0
         ;;
+    --original)
+        ORIGINAL="$2"
+        shift
+        ;;
     --)
         shift
         break
@@ -68,6 +73,7 @@ while [ "$#" -ge 1 ]; do
         break
         ;;
     esac
+
     shift
 done
 
@@ -133,6 +139,7 @@ ALL="$(git_config_get_bool_cond redate.all "${ALL:-}" 0)" || exit
 COMMITS="$(git_config_get_posint_cond redate.commits "${COMMITS:-}" 5)" || exit
 DEBUG="$(git_config_get_bool_cond redate.debug "${DEBUG:-}" 0)" || exit
 LIMITCHUNKS="$(git_config_get_posint_cond redate.limit "${LIMITCHUNKS:-}" 20)" || exit
+ORIGINAL="$(git_config_get_cond redate.original "${ORIGINAL:-}" refs/original)" || exit
 
 croak()  {
     # `die` is from git-sh-setup
@@ -172,14 +179,16 @@ else
 fi
 
 list_commits() {
-    git rev-list "$@" --no-commit-header --pretty=format:"$datefmt | %H | %s"
+    # XXX `--exclude` must come before `--all`, etc.; it only affects
+    # *subsequent* commit-filtering options.
+    git rev-list --exclude "${ORIGINAL}/*" "$@" --no-commit-header --pretty=format:"$datefmt | %H | %s"
 }
 
 apply_redate() {
     env_filter="${1?}" || return
     shift
 
-    run git filter-branch -f --env-filter "$env_filter" -- "$@"
+    run git filter-branch -f --original "$ORIGINAL" --env-filter "$env_filter" -- "$@"
 }
 
 datefmt=%cI

@@ -39,6 +39,7 @@ The available options are:
 - `redate.commits`: takes a positive integer.  Used as the default number of commits to edit.
 - `redate.debug`: takes a boolean value.  When enabled, `git redate` defaults to issuing extra diagnostic information to standard error.
 - `redate.limit`: takes a positive integer.  Used as the default number of commits to modify in a single `git filter-branch` operation.
+- `redate.original`: takes a namespace.  Used as the namespace where the re-dated commits will be stored.[^git-filter-branch-help]
 
 Example configuration:
 
@@ -48,7 +49,9 @@ all = no
 commits = 10
 debug = true
 limit = 35
+original = refs/redate
 ```
 
 [^git-gitrevisions-help]: See [`git help gitrevisions`](https://git-scm.com/docs/gitrevisions) for various ways to spell commit ranges.
 [^git-config-help]: See [`git help config`](https://git-scm.com/docs/git-config) for more info on configuring your Git client.
+[^git-filter-branch-help]: See [`git help filter-branch`](https://git-scm.com/docs/git-filter-branch) for more info on `git filter-branch` options.
