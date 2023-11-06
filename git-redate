@@ -274,6 +274,10 @@ fi
 
 list_commits "$@" > "$tmpfile" || exit
 
+if ! [ -s "$tmpfile" ]; then
+    croak "no matching commits found; nothing to re-date."
+fi
+
 git_editor "$tmpfile" || exit
 
 ITER=0
