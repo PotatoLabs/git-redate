@@ -1,209 +1,357 @@
-#!/bin/bash
+#!/bin/sh
 
-is_git_repo() {
-    git rev-parse --show-toplevel > /dev/null 2>&1
-    result=$?
-    if test $result != 0; then
-        >&2 echo 'Not a git repo!'
-        exit $result
-  fi
+dashless="${0##*/}"
+dashless="${dashless%%-*} ${dashless#*-}"
+
+# This variable is consulted by the code in "git-sh-setup", which is sourced
+# below -- we don't need to export the variable.
+# shellcheck disable=SC2034
+OPTIONS_SPEC="\
+${dashless} [<options>] [[--] <rev-list-options>]
+
+Change the dates of one or more git commits according to an interactively-specified scheme.
+
+${dashless} --all
+${dashless} --count 10
+${dashless} HEAD~10..HEAD~6
+--
+d,debug              show diagnostic output
+c,commits=<commits>  number of commits to re-date (default: 5)
+l,limit=<limit>      number of commits to re-date in a single batch (default: 20)
+a,all                re-date all commits
+n,dry-run            show re-dating commands, but do not execute them
+original=<namespace> namespace where original commits will be stored (default: refs/original)
+S,gpg-sign?<keyid>   sign commits (negate with --no-gpg-sign)
+no-gpg-sign*         do not sign commits
+"
+
+# Allow running this command from a subdirectory of the working tree
+# shellcheck disable=SC1091
+SUBDIRECTORY_OK=yes . "$(git --exec-path)/git-sh-setup"
+
+diag() {
+    echo "$@" 1>&2
 }
 
-is_git_repo
+while [ "$#" -ge 1 ]; do
+    key="$1"
 
-make_editor_choice() {
+    case $key in
+    -c | --commits)
+        COMMITS="$2"
+        shift
+        ;;
+    -l | --limit)
+        LIMITCHUNKS="$2"
+        shift
+        ;;
+    -d | --debug)
+        DEBUG=1
+        ;;
+    --no-debug)
+        DEBUG=0
+        ;;
+    -a | --all)
+        ALL=1
+        ;;
+    --no-all)
+        ALL=0
+        ;;
+    -n | --dry-run)
+        DRY_RUN=1
+        ;;
+    --no-dry-run)
+        DRY_RUN=0
+        ;;
+    --original)
+        ORIGINAL="$2"
+        shift
+        ;;
+    -S | --gpg-sign)
+        GPGSIGN=1
 
-    echo "Which editor do you want to use for this repo?\n";
-    echo "1. VI\n";
-    echo "2. NANO\n";
-    echo "3. Your own\n"
-    echo "You Choose: ";
-
-    read CHOOSE_EDITOR
-}
-
-get_editor_executable() {
-
-    echo "What is the path to your prefered test editor?\n";
-    read EDITOR_PATH
-}
-
-
-is_has_editor() {
-    SETTINGS_FILE="~/.redate-settings";
-    if [ -f "$SETTINGS_FILE" ]
-    then
-        OUR_EDITOR=$(cat ${SETTINGS_FILE});
-    elif [ ! -z "$EDITOR" ]
-    then
-	OUR_EDITOR="$EDITOR";
-    else
-        make_editor_choice;
-        if [ ${CHOOSE_EDITOR} == 3 ] || [ ${CHOOSE_EDITOR} == "3" ]; then
-            get_editor_executable
-            OUR_EDITOR=${EDITOR_PATH}
-        elif [ ${CHOOSE_EDITOR} == 1 ] || [ ${CHOOSE_EDITOR} == "1" ]; then
-            OUR_EDITOR="vi";
-        else
-            OUR_EDITOR="nano";
+        # XXX assumes key IDs do not start with `-` characters
+        if [ "$#" -ge 2 ]; then
+            case "$2" in
+                -*)
+                    # NOP, no key ID
+                    ;;
+                *)
+                    echo KEYID="$2"
+                    KEYID="$2"
+                    shift
+                    ;;
+            esac
         fi
-        echo ${OUR_EDITOR} > ${SETTINGS_FILE}
-    fi
-}
-
-is_has_editor
-
-
-ALL=0
-DEBUG=0
-LIMITCHUNKS=20
-
-while [[ $# -ge 1 ]]
-do
-key="$1"
-
-case $key in
-    -c| --commits)
-    COMMITS="$2"
-    if [ -z "${COMMITS}" ]; then COMMITS="5"; fi;
-    shift
-    ;;
-    -l| --limit)
-    LIMITCHUNKS="$2"
-    if [ -z "${LIMITCHUNKS}" ]; then LIMITCHUNKS="20"; fi;
-    shift
-    ;;
-    -d| --debug)
-    DEBUG=1
-    shift
-    ;;
-    -a| --all)
-    ALL=1
-    shift
-    ;;
+        ;;
+    --no-gpg-sign)
+        GPGSIGN=0
+        ;;
+    --)
+        shift
+        break
+        ;;
     *)
-    # unknown option
-    ;;
-esac
-shift
+        break
+        ;;
+    esac
+
+    shift
 done
 
-die () {
-    echo >&2 `basename $0`: $*
-    exit 1
+git_config_get_cond() {
+    setting="${1?}"
+    shift
+
+    current="${1:-}"
+    shift
+
+    default="${1?}"
+    shift
+
+    if [ -n "${current:-}" ]; then
+        final="$current"
+    else
+        from_config="$(git config "$@" --get "${setting?}")" || {
+            case "$?" in
+                128)
+                    return 128
+                    ;;
+            esac
+        }
+
+        if [ -n "$from_config" ]; then
+            final="$from_config"
+        else
+            # Normalize the default value by sending it through the `git
+            # config` machinery.
+            final="$(git -c "${setting?}=${default?}" config "$@" --get "${setting?}")" || {
+                case "$?" in
+                    128)
+                        return 128
+                        ;;
+                esac
+            }
+        fi
+    fi
+
+    printf -- '%s' "$final"
 }
 
-tmpfile=$(mktemp gitblah-XXXX)
-[ -f "$tmpfile" ] || die "could not get tmpfile=[$tmpfile]"
-trap "rm -f $tmpfile" EXIT
+git_config_get_bool_cond() {
+    raw="$(git_config_get_cond "$@" --bool)" || return
 
+    case "$raw" in
+        true)
+            printf -- '1'
+            ;;
+        false)
+            printf -- '0'
+            ;;
+        *)
+            printf -- '%s' "$raw"
+        ;;
+    esac
+}
+
+git_config_get_posint_cond() {
+    raw="$(git_config_get_cond "$@" --type int)" || return
+
+    if [ -z "$raw" ] || [ "$raw" -lt 1 ]; then
+        die "fatal: bad positive integer config value '${raw}' for '${1?}'"
+        return 128
+    fi
+
+    printf -- '%d' "$raw"
+}
+
+ALL="$(git_config_get_bool_cond redate.all "${ALL:-}" 0)" || exit
+COMMITS="$(git_config_get_posint_cond redate.commits "${COMMITS:-}" 5)" || exit
+DEBUG="$(git_config_get_bool_cond redate.debug "${DEBUG:-}" 0)" || exit
+LIMITCHUNKS="$(git_config_get_posint_cond redate.limit "${LIMITCHUNKS:-}" 20)" || exit
+ORIGINAL="$(git_config_get_cond redate.original "${ORIGINAL:-}" refs/original)" || exit
+GPGSIGN="$(git_config_get_bool_cond redate.gpgsign "${GPGSIGN:-}" 0)" || exit
+
+croak()  {
+    # `die` is from git-sh-setup
+    die "${dashless}: $*"
+}
+
+GIT_DIR="${GIT_DIR:-$(git rev-parse --git-dir 2> /dev/null)}"
+
+if ! tmpfile=$(mktemp "${GIT_DIR:+${GIT_DIR}/}GIT_REDATE.XXXXXXXXXX") || ! [ -f "$tmpfile" ]; then
+    croak "could not get tmpfile=[$tmpfile]"
+fi
+
+cleanup() {
+    rm -f "${tmpfile?}"
+}
+
+trap cleanup EXIT
+
+if [ "$DEBUG" = 1 ]; then
+    debug() {
+        diag "$@"
+    }
+else
+    debug() {
+        :
+    }
+fi
+
+if [ "$DRY_RUN" = 1 ]; then
+    run() {
+        diag "$@"
+    }
+else
+    run() {
+        "$@"
+    }
+fi
+
+run_filter_branch_base() {
+    run git filter-branch -f --original "$ORIGINAL" "$@"
+}
+
+if [ "${GPGSIGN:-0}" = 1 ]; then
+    if [ -n "${KEYID:-}" ]; then
+        run_filter_branch() {
+            # Prevent shell injection via `KEYID` by exporting it inline and
+            # expanding the exported value safely within the commit filter
+            # command.
+            # shellcheck disable=SC2016
+            __GIT_REDATE_KEYID="$KEYID" run_filter_branch_base --commit-filter 'git commit-tree -S"${__GIT_REDATE_KEYID?}" "$@"' "$@"
+        }
+    else
+        run_filter_branch() {
+            run_filter_branch_base --commit-filter 'git commit-tree -S "$@"' "$@"
+        }
+    fi
+else
+    run_filter_branch() {
+        run_filter_branch_base "$@"
+    }
+fi
+
+
+list_commits() {
+    # XXX `--exclude` must come before `--all`, etc.; it only affects
+    # *subsequent* commit-filtering options.
+    git rev-list --exclude "${ORIGINAL}/*" "$@" --no-commit-header --pretty=format:"$datefmt | %H | %s"
+}
+
+apply_redate() {
+    env_filter="${1?}" || return
+    shift
+
+    run_filter_branch --env-filter "$env_filter" -- "$@"
+}
 
 datefmt=%cI
-if [ "`git log -n1  --pretty=format:"$datefmt"`" == "$datefmt" ];
-then
+if [ "$(git log -n1 --pretty=format:"$datefmt")" = "$datefmt" ]; then
     datefmt=%ci
 fi
 
-if [ "${ALL}" -eq 1 ];
-then
-    git log --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-else
-    if [ -n "${COMMITS+set}" ];
-    then git log -n ${COMMITS} --pretty=format:"$datefmt | %H | %s" > $tmpfile;
-    else git log -n 5 --pretty=format:"$datefmt | %H | %s" > $tmpfile;
+if [ "$ALL" -eq 1 ]; then
+    set -- --all
+elif [ "$#" -eq 0 ]; then
+    # Don't use `--max-count="$COMMITS"`, as `git filter-branch` passes options
+    # through to both `git rev-list` (which recognizes `--max-count`) *and*
+    # `git rev-parse` (which does not -- or, rather, which treats
+    # `--max-counts="$COUNT"` as a revision to parse).
+    if count="$(list_commits --count HEAD 2>/dev/null)"; then
+        if [ "$count" -lt "$COMMITS" ]; then
+            COMMITS="$count"
+        fi
+    fi
+
+    if [ "$COMMITS" -eq 1 ]; then
+        set -- HEAD
+    else
+        set -- "HEAD~${COMMITS}..HEAD"
     fi
 fi
 
-${VISUAL:-${EDITOR:-${OUR_EDITOR}}} $tmpfile
+list_commits "$@" > "$tmpfile" || exit
 
+if ! [ -s "$tmpfile" ]; then
+    croak "no matching commits found; nothing to re-date."
+fi
+
+git_editor "$tmpfile" || exit
 
 ITER=0
 COLITER=0
-declare -a COLLECTION
 
-COUNTCOMMITS=$(awk 'END {print NR}' $tmpfile)
+COUNTCOMMITS=$(awk 'END {print NR}' "$tmpfile")
 
-while read commit || [ -n "$commit" ]; do
+while read -r commit || [ -n "$commit" ]; do
+    IFS="|" read -r date hash _ << COMMIT
+$commit
+COMMIT
 
-    IFS="|" read date hash message <<< "$commit"
-    shopt -s nocasematch
-    if [[ "$date" == 'now' ]]; then
-        date=$(date +%Y-%m-%dT%H:%M:%S%z);
+    date_lc="$(echo "$date" | tr '[:upper:]' '[:lower:]')"
+    if [ "$date_lc" = 'now' ]; then
+        date=$(date +%Y-%m-%dT%H:%M:%S%z)
     fi
-    shopt -u nocasematch
-    if [ "$datefmt" == "%cI" ]
-    then
-        DATE_NO_SPACE="$(echo "${date}" | tr -d '[[:space:]]')"
+
+    if [ "$datefmt" = "%cI" ]; then
+        DATE_NO_SPACE="$(echo "${date}" | tr -d '[:space:]')"
     else
-        DATE_NO_SPACE="$(echo "${date}")"
+        DATE_NO_SPACE="$date"
     fi
 
-
-    COMMIT_ENV=$(cat <<-END
+    # `COMMIT_ENV` is used in an `eval` below; silence warning about unused
+    # variable.
+    # shellcheck disable=SC2034
+    COMMIT_ENV=$(
+                 cat <<- END
 if [ \$GIT_COMMIT = $hash ];
 then
     export GIT_AUTHOR_DATE="$DATE_NO_SPACE"
     export GIT_COMMITTER_DATE="$DATE_NO_SPACE";
 fi;
 END
-)
+    )
 
-    ((ITER++))
-
-    if [ "${DEBUG}" -eq 1 ] && [ $((ITER % LIMITCHUNKS)) == $((LIMITCHUNKS - 1)) ];
-    then
-        echo "Chunk $COLITER Finished"
+    if [ $((ITER % LIMITCHUNKS)) = 0 ]; then
+        COLITER="$((COLITER + 1))"
+        debug "Chunk $COLITER Started"
     fi
 
-    if [ $((ITER % LIMITCHUNKS)) == 0 ]
-    then
-        ((COLITER++))
+    ITER="$((ITER + 1))"
 
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $COLITER Started"
-        fi
+    eval "__GIT_REDATE_COLLECTION_${COLITER}=\"\${__GIT_REDATE_COLLECTION_${COLITER}:-}\${COMMIT_ENV}\""
 
+    debug "Commit $ITER/$COUNTCOMMITS Collected"
+
+    if [ $((ITER % LIMITCHUNKS)) = 0 ]; then
+        debug "Chunk $COLITER Finished"
     fi
+done < "$tmpfile"
 
-    COLLECTION[$COLITER]=${COLLECTION[COLITER]}"$COMMIT_ENV"
-    if [ "${DEBUG}" -eq 1 ]
-    then
-        echo "Commit $ITER/$COUNTCOMMITS Collected"
-    fi
+if [ "$COLITER" -gt 0 ]; then
+    debug "Chunk $COLITER Finished"
+fi
 
-done < $tmpfile
+rc=0
+ITERATOR=1
+while [ "$ITERATOR" -le "$COLITER" ]; do
+    each=""
+    eval "each=\"\$__GIT_REDATE_COLLECTION_${ITERATOR}\""
 
-ITERATOR=0
-for each in "${COLLECTION[@]}"
-do
+    debug "Chunk $ITERATOR/$COLITER Started"
 
-    ((ITERATOR++))
+    apply_redate "$each" "$@" || rc="$?"
 
-    if [ "${ALL}" -eq 1 ];
-    then
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" -- --all
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" -- --all >/dev/null
-        fi
-    else
-        if [ "${DEBUG}" -eq 1 ];
-        then
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Started"
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD
-            echo "Chunk $ITERATOR/"${#COLLECTION[@]}" Finished"
-        else
-            git filter-branch -f --env-filter "$each" HEAD~${COMMITS}..HEAD >/dev/null
-        fi
-    fi
+    debug "Chunk $ITERATOR/$COLITER Finished"
+
+    ITERATOR="$((ITERATOR + 1))"
 done
 
-if [ $? = 0 ] ; then
-    echo "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
+if [ "$rc" = 0 ]; then
+    diag "Git commit dates updated. Run 'git push -f BRANCH_NAME' to push your changes."
 else
-    echo "Git redate failed. Please make sure you run this on a clean working directory."
+    diag "Git redate failed. Please make sure you run this on a clean working directory."
+    exit "$rc"
 fi

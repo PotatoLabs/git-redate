@@ -17,9 +17,43 @@ For window's users, you may paste the file into `${INSTALLATION_PATH}\mingw64\li
 
 Simply run: `git redate --commits [[number of commits to view]]`.  You'll have to force push in order for your commit history to be rewritten.
 
-To be able to edit all the commits at once add the --all option: `git redate --all`
+To be able to edit all the commits at once add the --all option: `git redate --all`.  This option can be negated with `--no-all`.
+
+You can also specify a range of commits[^git-gitrevisions-help] as a positional parameter, instead of `--count` or `--all`: `git redate HEAD~10..HEAD~6`
 
 **Make sure to run this on a clean working directory otherwise it won't work.**
 
 The `--commits` (a.k.a. `-c`) argument is optional, and defaults to 5 if not provided.
 
+<!-- note that this renders an info box -->
+> **Note**
+> See `git redate -h` for further usage information.
+
+## Configuration
+
+You may set default values for various `git redate` options in your Git client configuration.[^git-config-help]
+
+The available options are:
+
+- `redate.all`: takes a boolean value (`true`, `false`, `yes`, `no`, etc.[^git-config-help]). When enabled, `git redate` defaults to editing all commits.
+- `redate.commits`: takes a positive integer.  Used as the default number of commits to edit.
+- `redate.debug`: takes a boolean value.  When enabled, `git redate` defaults to issuing extra diagnostic information to standard error.
+- `redate.limit`: takes a positive integer.  Used as the default number of commits to modify in a single `git filter-branch` operation.
+- `redate.original`: takes a namespace.  Used as the namespace where the re-dated commits will be stored.[^git-filter-branch-help]
+- `redate.gpgsign`: takes a boolean value.  When enabled, `git redate` defaults to signing re-dated commits.
+
+Example configuration:
+
+```INI
+[redate]
+all = no
+commits = 10
+debug = true
+limit = 35
+original = refs/redate
+gpgsign = yes
+```
+
+[^git-gitrevisions-help]: See [`git help gitrevisions`](https://git-scm.com/docs/gitrevisions) for various ways to spell commit ranges.
+[^git-config-help]: See [`git help config`](https://git-scm.com/docs/git-config) for more info on configuring your Git client.
+[^git-filter-branch-help]: See [`git help filter-branch`](https://git-scm.com/docs/git-filter-branch) for more info on `git filter-branch` options.
